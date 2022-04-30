@@ -17,7 +17,6 @@ import pytorch_lightning as pl
 from pytorch_lightning import _logger as log
 import random
 from retriever import *
-from pytorch_lightning.metrics.converters import _sync_ddp_if_available
 import segmentation_models_pytorch as smp
 
 class LitModel(pl.LightningModule):
@@ -128,7 +127,7 @@ class LitModel(pl.LightningModule):
         keys = outputs[0].keys()          
         metrics = {}
         for metric_name in keys:
-            metrics[metric_name] = _sync_ddp_if_available(torch.stack([output[metric_name] for output in outputs]).mean(), reduce_op='avg')
+            metrics[metric_name] = torch.stack([output[metric_name] for output in outputs]).mean()
                         
         metrics['step'] = self.current_epoch    
             
