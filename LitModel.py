@@ -67,8 +67,8 @@ class LitModel(pl.LightningModule):
 
         # 1. net:
 
-        self.net = smp.Unet(self.backbone, classes=len(self.class_values), 
-                            activation=None, encoder_weights='imagenet')
+        self.net = smp.UnetPlusPlus(self.backbone, classes=len(self.class_values),
+                            activation=None, encoder_weights='imagenet', in_channels=9)
 
         # 2. Loss:
         self.loss_func = lambda x, y: torch.nn.CrossEntropyLoss()(x, torch.argmax(y,axis=1))
@@ -129,7 +129,8 @@ class LitModel(pl.LightningModule):
         for metric_name in keys:
             metrics[metric_name] = torch.stack([output[metric_name] for output in outputs]).mean()
                         
-        metrics['step'] = self.current_epoch    
+        metrics['step'] = self.current_epoch
+        print(f'\nValidation metrics: {metrics}')
             
         return {'log': metrics}
 
@@ -168,9 +169,9 @@ class LitModel(pl.LightningModule):
 
         image_names = np.loadtxt(self.data_path/'files_trainable', dtype='str').tolist()
         
-        new_image_names = glob.glob(str(self.data_path/'masks')+'/*')
+        image_names = glob.glob(str(self.data_path/'masks')+'/*')
         #convert absolute path to relative path
-        new_image_names = [os.path.relpath(i, self.data_path) for i in new_image_names]
+        image_names = [os.path.relpath(i, self.data_path) for i in image_names]
 
         random.shuffle(image_names)
         

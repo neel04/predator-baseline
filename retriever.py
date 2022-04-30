@@ -233,10 +233,10 @@ class TrainRetriever(Dataset):
             sample = self.preprocess(image=image, mask=mask)
             image = sample['image']
             mask = sample['mask']
-        print(image.shape, cannied_image.shape, superpixel_image.shape)
+
         final_input_image = np.concatenate([image, cannied_image, superpixel_image], axis=0)
-        print(final_input_image.shape)
-        return image, mask
+
+        return final_input_image, mask
 
     def __len__(self) -> int:
         return len(self.image_names)
