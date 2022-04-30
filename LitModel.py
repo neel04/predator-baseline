@@ -1,8 +1,8 @@
+from hashlib import new
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
-import pandas as pd
 import numpy as np 
-import pickle
+import glob
 import argparse
 from collections import OrderedDict
 from pathlib import Path
@@ -167,12 +167,16 @@ class LitModel(pl.LightningModule):
     def setup(self, stage: str): 
 
         image_names = np.loadtxt(self.data_path/'files_trainable', dtype='str').tolist()
-            
+        
+        new_image_names = glob.glob(str(self.data_path/'masks')+'/*')
+        #convert absolute path to relative path
+        new_image_names = [os.path.relpath(i, self.data_path) for i in new_image_names]
+
         random.shuffle(image_names)
         
         self.train_dataset = TrainRetriever(
             data_path=self.data_path,
-            image_names=[x.split('masks/')[-1] for x in image_names if not x.endswith('9.png')],
+            image_names=[x.split('masks/')[-1] for x in image_names if not (x.endswith('9.png') or x.endswith('9.jpg'))],
             preprocess_fn=self.preprocess_fn,
             transforms=get_train_transforms(self.height, self.width, self.augmentation_level),
             class_values=self.class_values
@@ -180,7 +184,7 @@ class LitModel(pl.LightningModule):
         
         self.valid_dataset = TrainRetriever(
             data_path=self.data_path,
-            image_names=[x.split('masks/')[-1] for x in image_names if x.endswith('9.png')],
+            image_names=[x.split('masks/')[-1] for x in image_names if (x.endswith('9.png') or x.endswith('9.jpg'))],
             preprocess_fn=self.preprocess_fn,
             transforms=get_valid_transforms(self.height, self.width),
             class_values=self.class_values

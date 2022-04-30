@@ -148,12 +148,47 @@ def get_valid_transforms(height: int = 437,
 def to_tensor(x, **kwargs):
     return x.transpose(2, 0, 1).astype('float32')
 
-def get_preprocessing(preprocessing_fn: Callable):
+def get_preprocessing(preprocessing_fn: Callable, height: int = 256, width: int = 256):
     _transform = [
         A.Lambda(image=preprocessing_fn),
         A.Lambda(image=to_tensor, mask=to_tensor),
     ]
     return A.Compose(_transform)
+
+#Precomputing superpixels
+#Run this once, unless already computed by providing all the paths to images
+def superpixels_precom(paths):
+    print(f'\nPrecomputing superpixels... might take hours :(')
+    exec_bash(f'mkdir ./comma10k/superpixels')
+
+    for img_path in tqdm(paths):
+        og_image = cv2.imread(img_path)
+        src_image = cv2.resize(og_image, (256, 256))  
+
+        segments = slic(src_image, n_segments=1500, sigma=1, compactness=2, multichannel=True)
+        superpixels = color.label2rgb(segments, src_image, kind='avg')
+
+        cv2.imwrite(f'./comma10k/superpixels/{img_path.split("/")[-1]}', superpixels)
+
+def algo_preprocessor(image, img_path):
+    '''
+    returns a preprocessed image based on SLIC (Superpixels) and Canny algorithm
+    '''
+    #Cannying the image
+    src_image = cv2.resize(image, (256, 256)) #ensure the image is 256x256
+    
+    #convert image to gray for cannying
+    gray_image = cv2.cvtColor(src_image, cv2.COLOR_BGR2GRAY)
+    img_blur = np.uint8(cv2.GaussianBlur(gray_image, (3,3), 0))
+    canny_edges = cv2.cvtColor(cv2.Canny(image=img_blur, threshold1=30, threshold2=50), cv2.COLOR_BGR2RGB).astype('uint8') # Canny Edge Detection
+
+    #loading precomputed superpixels
+    superpixels = cv2.cvtColor(cv2.imread(f'./comma10k/superpixels/{img_path.split("/")[-1]}'), cv2.COLOR_BGR2RGB)
+    
+    #convert hwc to chw for concatenation
+    superpixels = np.transpose(superpixels, (2, 0, 1))
+    canny_edges = np.transpose(canny_edges, (2, 0, 1))
+    return superpixels, canny_edges
 
 class TrainRetriever(Dataset):
 
@@ -176,11 +211,14 @@ class TrainRetriever(Dataset):
     def __getitem__(self, index: int):
         
         image_name = self.image_names[index]
-        
         image = cv2.imread(str(self.data_path/self.images_folder/image_name))
+        image = cv2.resize(image, (256, 256))
+        #getting preprocessed images
+        superpixel_image, cannied_image = algo_preprocessor(image, image_name) #image_name is supposed to be the path
+        
+        #image is converted to RGB for SMP, while unconverted image is send for preprocessing
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
-        mask = cv2.imread(str(self.data_path/self.masks_folder/image_name), 0).astype('uint8')
+        mask = cv2.resize(cv2.imread(str(self.data_path/self.masks_folder/image_name), 0), (256, 256)).astype('uint8')
 
         if self.transforms:
             sample = self.transforms(image=image, mask=mask)
@@ -188,15 +226,17 @@ class TrainRetriever(Dataset):
             mask = sample['mask']
 
         mask = np.stack([(mask == v) for v in self.class_values], axis=-1).astype('uint8')
+        #mask is 6 channels - and binary for each channel as expected
+        #image is shape: (256, 256, 3) and is in range [0,255]
 
         if self.preprocess:
             sample = self.preprocess(image=image, mask=mask)
             image = sample['image']
             mask = sample['mask']
-
+        print(image.shape, cannied_image.shape, superpixel_image.shape)
+        final_input_image = np.concatenate([image, cannied_image, superpixel_image], axis=0)
+        print(final_input_image.shape)
         return image, mask
 
     def __len__(self) -> int:
         return len(self.image_names)
-    
-    
