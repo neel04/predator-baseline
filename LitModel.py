@@ -57,8 +57,9 @@ class LitModel(pl.LightningModule):
 
         self.train_custom_metrics = {'train_acc': smp.utils.metrics.Accuracy(activation='softmax2d')}
         self.validation_custom_metrics = {'val_acc': smp.utils.metrics.Accuracy(activation='softmax2d')}
-
-        self.preprocess_fn = smp.encoders.get_preprocessing_fn(self.backbone, pretrained='imagenet')
+        
+        #self.backbone = smp.encoders.get_encoder(self.backbone, in_channels=9, weights='imagenet')
+        self.preprocess_fn = smp.encoders.get_preprocessing_fn('resnet50' if self.backbone.startswith('tu-') else self.backbone , 'imagenet')
         
         self.__build_model()
 
@@ -67,7 +68,7 @@ class LitModel(pl.LightningModule):
 
         # 1. net:
 
-        self.net = smp.UnetPlusPlus(self.backbone, classes=len(self.class_values),
+        self.net = smp.FPN(self.backbone, classes=len(self.class_values), decoder_merge_policy='add',
                             activation=None, encoder_weights='imagenet', in_channels=9)
 
         # 2. Loss:
@@ -199,7 +200,9 @@ class LitModel(pl.LightningModule):
         loader = DataLoader(dataset=_dataset,
                             batch_size=self.batch_size,
                             num_workers=self.num_workers,
-                            shuffle=True if train else False)
+                            shuffle=True if train else False,
+                            pin_memory=True,
+                            prefetch_factor=2)
 
         return loader
 
