@@ -239,7 +239,7 @@ class TrainRetriever(Dataset):
 
         final_input_image = cv2.addWeighted(image, 0.8, cannied_image, 0.20, 0.5).transpose(2,0,1)
 
-        assert final_input_image.shape == (3,256,256) and final_input_image is not None
+        #assert final_input_image.shape == (3,256,256) and final_input_image is not None
 
         return final_input_image, mask
 
