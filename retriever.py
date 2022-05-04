@@ -6,6 +6,7 @@ import pickle
 import cv2
 import albumentations as A
 from albumentations.core.composition import Compose
+import einops
 from typing import Callable, List
 from pathlib import Path
 import os
@@ -155,6 +156,41 @@ def get_preprocessing(preprocessing_fn: Callable):
     ]
     return A.Compose(_transform)
 
+#Precomputing superpixels
+#Run this once, unless already computed by providing all the paths to images
+def superpixels_precom(paths):
+    print(f'\nPrecomputing superpixels... might take hours :(')
+    exec_bash(f'mkdir ./comma10k/superpixels')
+
+    for img_path in tqdm(paths):
+        og_image = cv2.imread(img_path)
+        src_image = cv2.resize(og_image, (256, 256))  
+
+        segments = slic(src_image, n_segments=1500, sigma=1, compactness=2, multichannel=True)
+        superpixels = color.label2rgb(segments, src_image, kind='avg')
+
+        cv2.imwrite(f'./comma10k/superpixels/{img_path.split("/")[-1]}', superpixels)
+
+def algo_preprocessor(image, img_path):
+    '''
+    returns a preprocessed image based on SLIC (Superpixels) and Canny algorithm
+    '''
+    #Cannying the image
+    src_image = cv2.resize(image, (256, 256)) #ensure the image is 256x256
+    
+    #convert image to gray for cannying
+    gray_image = cv2.cvtColor(src_image, cv2.COLOR_BGR2GRAY)
+    img_blur = np.uint8(cv2.GaussianBlur(gray_image, (3,3), 0))
+    canny_edges = cv2.cvtColor(cv2.Canny(image=img_blur, threshold1=30, threshold2=50), cv2.COLOR_BGR2RGB) # Canny Edge Detection
+
+    #loading precomputed superpixels
+    superpixels = cv2.cvtColor(cv2.imread(f'./comma10k/superpixels/{img_path.split("/")[-1]}'), cv2.COLOR_BGR2RGB)
+    
+    #convert hwc to chw for concatenation
+    #superpixels = np.transpose(superpixels, (2, 0, 1))
+    #canny_edges = np.transpose(canny_edges, (2, 0, 1))
+    return superpixels, canny_edges
+
 class TrainRetriever(Dataset):
 
     def __init__(self, 
@@ -180,6 +216,9 @@ class TrainRetriever(Dataset):
         image = cv2.imread(str(self.data_path/self.images_folder/image_name))
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
+        #getting preprocessed images
+        superpixel_image, cannied_image = algo_preprocessor(image, image_name) #image_name is supposed to be the path
+
         mask = cv2.imread(str(self.data_path/self.masks_folder/image_name), 0).astype('uint8')
 
         if self.transforms:
@@ -193,10 +232,16 @@ class TrainRetriever(Dataset):
             sample = self.preprocess(image=image, mask=mask)
             image = sample['image']
             mask = sample['mask']
+            cannied_image = self.preprocess(image=cannied_image)['image'] #extracting the preprocessed frame
+        
+        image = image.transpose(1,2,0).astype('float32')
+        cannied_image = cannied_image.transpose(1,2,0).astype('float32')
 
-        return image, mask
+        final_input_image = cv2.addWeighted(image, 0.8, cannied_image, 0.20, 0.5).transpose(2,0,1)
+
+        assert final_input_image.shape == (3,256,256) and final_input_image is not None
+
+        return final_input_image, mask
 
     def __len__(self) -> int:
         return len(self.image_names)
-    
-    
