@@ -130,7 +130,8 @@ class LitModel(pl.LightningModule):
             metrics[metric_name] = torch.stack([output[metric_name] for output in outputs]).mean()
                         
         metrics['step'] = self.current_epoch    
-            
+        
+        print(f'\nFinal Computed Validation Metrics: {metrics}')
         return {'log': metrics}
 
 
