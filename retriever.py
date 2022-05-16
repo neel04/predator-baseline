@@ -148,7 +148,7 @@ def get_valid_transforms(height: int = 437,
 def to_tensor(x, **kwargs):
     return x.transpose(2, 0, 1).astype('float32')
 
-def get_preprocessing(preprocessing_fn: Callable):
+def get_preprocessing(preprocessing_fn: Callable, height: int = 256, width: int = 256):
     _transform = [
         A.Lambda(image=preprocessing_fn),
         A.Lambda(image=to_tensor, mask=to_tensor),
@@ -180,6 +180,7 @@ def algo_preprocessor(image, img_path):
     #convert image to gray for cannying
     gray_image = cv2.cvtColor(src_image, cv2.COLOR_BGR2GRAY)
     img_blur = np.uint8(cv2.GaussianBlur(gray_image, (3,3), 0))
+
     canny_edges = cv2.cvtColor(cv2.Canny(image=img_blur, threshold1=30, threshold2=50), cv2.COLOR_BGR2RGB) # Canny Edge Detection
 
     #loading precomputed superpixels
@@ -216,8 +217,12 @@ class TrainRetriever(Dataset):
     def __getitem__(self, index: int):
         
         image_name = self.image_names[index]
-        
         image = cv2.imread(str(self.data_path/self.images_folder/image_name))
+        image = cv2.resize(image, (256, 256))
+        #getting preprocessed images
+        superpixel_image, cannied_image = algo_preprocessor(image, image_name) #image_name is supposed to be the path
+        
+        #image is converted to RGB for SMP, while unconverted image is send for preprocessing
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         #getting preprocessed images
@@ -230,6 +235,8 @@ class TrainRetriever(Dataset):
             mask = sample['mask']
 
         mask = np.stack([(mask == v) for v in self.class_values], axis=-1).astype('uint8')
+        #mask is 6 channels - and binary for each channel as expected
+        #image is shape: (256, 256, 3) and is in range [0,255]
 
         if self.preprocess:
             sample = self.preprocess(image=image, mask=mask)
@@ -244,6 +251,8 @@ class TrainRetriever(Dataset):
         #final_input_image = cv2.addWeighted(image, 0.8, cannied_image, 0.20, 0.5).transpose(2,0,1)
 
         #assert final_input_image.shape == (3,256,256) and final_input_image is not None
+
+        final_input_image = np.concatenate([image, cannied_image, superpixel_image], axis=0)
 
         return final_input_image, mask
 

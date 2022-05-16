@@ -1,3 +1,4 @@
+from hashlib import new
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 import numpy as np 
@@ -126,9 +127,15 @@ class LitModel(pl.LightningModule):
         for metric_name in keys:
             metrics[metric_name] = torch.stack([output[metric_name] for output in outputs]).mean()
                         
+
         metrics['step'] = self.current_epoch    
         
         print(f'\nFinal Computed Validation Metrics: {metrics}')
+
+        metrics['step'] = self.current_epoch
+        print(f'\nValidation metrics: {metrics}')
+            
+
         return {'log': metrics}
 
 
@@ -166,12 +173,16 @@ class LitModel(pl.LightningModule):
     def setup(self, stage: str): 
 
         image_names = np.loadtxt(self.data_path/'files_trainable', dtype='str').tolist()
-            
+        
+        image_names = glob.glob(str(self.data_path/'masks')+'/*')
+        #convert absolute path to relative path
+        image_names = [os.path.relpath(i, self.data_path) for i in image_names]
+
         random.shuffle(image_names)
         
         self.train_dataset = TrainRetriever(
             data_path=self.data_path,
-            image_names=[x.split('masks/')[-1] for x in image_names if not x.endswith('9.png')],
+            image_names=[x.split('masks/')[-1] for x in image_names if not (x.endswith('9.png') or x.endswith('9.jpg'))],
             preprocess_fn=self.preprocess_fn,
             transforms=get_train_transforms(self.height, self.width, self.augmentation_level),
             class_values=self.class_values
@@ -179,7 +190,7 @@ class LitModel(pl.LightningModule):
         
         self.valid_dataset = TrainRetriever(
             data_path=self.data_path,
-            image_names=[x.split('masks/')[-1] for x in image_names if x.endswith('9.png')],
+            image_names=[x.split('masks/')[-1] for x in image_names if (x.endswith('9.png') or x.endswith('9.jpg'))],
             preprocess_fn=self.preprocess_fn,
             transforms=get_valid_transforms(self.height, self.width),
             class_values=self.class_values
@@ -192,7 +203,9 @@ class LitModel(pl.LightningModule):
         loader = DataLoader(dataset=_dataset,
                             batch_size=self.batch_size,
                             num_workers=self.num_workers,
-                            shuffle=True if train else False)
+                            shuffle=True if train else False,
+                            pin_memory=True,
+                            prefetch_factor=2)
 
         return loader
 
