@@ -2,20 +2,18 @@ from hashlib import new
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 import numpy as np 
-import glob
+
 import argparse
 from collections import OrderedDict
 from pathlib import Path
-from tempfile import TemporaryDirectory
-from typing import Optional, Generator, Union
+
 import torch
-import torch.nn.functional as F
-from torch import optim
-from torch.nn import Module
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
 from pytorch_lightning import _logger as log
+
 import random
+from typing import Union
 from retriever import *
 import segmentation_models_pytorch as smp
 
@@ -57,9 +55,8 @@ class LitModel(pl.LightningModule):
 
         self.train_custom_metrics = {'train_acc': smp.utils.metrics.Accuracy(activation='softmax2d')}
         self.validation_custom_metrics = {'val_acc': smp.utils.metrics.Accuracy(activation='softmax2d')}
-        
-        #self.backbone = smp.encoders.get_encoder(self.backbone, in_channels=9, weights='imagenet')
-        self.preprocess_fn = smp.encoders.get_preprocessing_fn('resnet50' if self.backbone.startswith('tu-') else self.backbone , 'imagenet')
+
+        self.preprocess_fn = smp.encoders.get_preprocessing_fn('resnet50' if self.backbone.startswith('tu-') else self.backbone, pretrained='imagenet')
         
         self.__build_model()
 
@@ -68,15 +65,15 @@ class LitModel(pl.LightningModule):
 
         # 1. net:
 
-        self.net = smp.FPN(self.backbone, classes=len(self.class_values), decoder_merge_policy='add',
-                            activation=None, encoder_weights='imagenet', in_channels=9)
+        self.net = smp.FPN(self.backbone, classes=len(self.class_values), decoder_merge_policy='cat',
+                            activation=None, encoder_weights='imagenet', in_channels=6)
 
         # 2. Loss:
         self.loss_func = lambda x, y: torch.nn.CrossEntropyLoss()(x, torch.argmax(y,axis=1))
 
     def forward(self, x):
         """Forward pass. Returns logits."""
-
+        
         x = self.net(x)
         
         return x
@@ -130,9 +127,15 @@ class LitModel(pl.LightningModule):
         for metric_name in keys:
             metrics[metric_name] = torch.stack([output[metric_name] for output in outputs]).mean()
                         
+
+        metrics['step'] = self.current_epoch    
+        
+        print(f'\nFinal Computed Validation Metrics: {metrics}')
+
         metrics['step'] = self.current_epoch
         print(f'\nValidation metrics: {metrics}')
             
+
         return {'log': metrics}
 
 
@@ -166,6 +169,7 @@ class LitModel(pl.LightningModule):
 
         print('data ready')
 
+
     def setup(self, stage: str): 
 
         image_names = np.loadtxt(self.data_path/'files_trainable', dtype='str').tolist()
@@ -190,8 +194,7 @@ class LitModel(pl.LightningModule):
             preprocess_fn=self.preprocess_fn,
             transforms=get_valid_transforms(self.height, self.width),
             class_values=self.class_values
-        )
-    
+        )    
     
     def __dataloader(self, train):
         """Train/validation loaders."""

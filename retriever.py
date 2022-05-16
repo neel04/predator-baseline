@@ -1,14 +1,14 @@
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
-import pandas as pd
+
 import numpy as np
-import pickle
+
 import cv2
 import albumentations as A
 from albumentations.core.composition import Compose
+
 from typing import Callable, List
 from pathlib import Path
-import os
 from torch.utils.data import Dataset
 import torch
 import sys
@@ -180,14 +180,20 @@ def algo_preprocessor(image, img_path):
     #convert image to gray for cannying
     gray_image = cv2.cvtColor(src_image, cv2.COLOR_BGR2GRAY)
     img_blur = np.uint8(cv2.GaussianBlur(gray_image, (3,3), 0))
-    canny_edges = cv2.cvtColor(cv2.Canny(image=img_blur, threshold1=30, threshold2=50), cv2.COLOR_BGR2RGB).astype('uint8') # Canny Edge Detection
+
+    canny_edges = cv2.cvtColor(cv2.Canny(image=img_blur, threshold1=30, threshold2=50), cv2.COLOR_BGR2RGB) # Canny Edge Detection
 
     #loading precomputed superpixels
-    superpixels = cv2.cvtColor(cv2.imread(f'./comma10k/superpixels/{img_path.split("/")[-1]}'), cv2.COLOR_BGR2RGB)
+    #check if path exists for switching between Kaggle and Colab
+    base_path = '../input/comma10k/'
+
+    if not os.path.exists(base_path):
+        base_path = './comma10k/'
+    superpixels = cv2.cvtColor(cv2.imread(f'{base_path}superpixels/{img_path.split("/")[-1]}'), cv2.COLOR_BGR2RGB)
     
     #convert hwc to chw for concatenation
-    superpixels = np.transpose(superpixels, (2, 0, 1))
-    canny_edges = np.transpose(canny_edges, (2, 0, 1))
+    #superpixels = np.transpose(superpixels, (2, 0, 1))
+    #canny_edges = np.transpose(canny_edges, (2, 0, 1))
     return superpixels, canny_edges
 
 class TrainRetriever(Dataset):
@@ -218,7 +224,10 @@ class TrainRetriever(Dataset):
         
         #image is converted to RGB for SMP, while unconverted image is send for preprocessing
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        mask = cv2.resize(cv2.imread(str(self.data_path/self.masks_folder/image_name), 0), (256, 256)).astype('uint8')
+
+        #getting preprocessed images
+        superpixel_image, cannied_image = algo_preprocessor(image, image_name) #image_name is supposed to be the path
+        mask = cv2.imread(str(self.data_path/self.masks_folder/image_name), 0).astype('uint8')
 
         if self.transforms:
             sample = self.transforms(image=image, mask=mask)
@@ -233,6 +242,15 @@ class TrainRetriever(Dataset):
             sample = self.preprocess(image=image, mask=mask)
             image = sample['image']
             mask = sample['mask']
+            cannied_image = self.preprocess(image=cannied_image)['image'] #extracting the preprocessed frame
+        
+        image = image.astype('float32')
+        cannied_image = cannied_image.astype('float32')
+
+        final_input_image = np.concatenate([image, cannied_image], axis=0)
+        #final_input_image = cv2.addWeighted(image, 0.8, cannied_image, 0.20, 0.5).transpose(2,0,1)
+
+        #assert final_input_image.shape == (3,256,256) and final_input_image is not None
 
         final_input_image = np.concatenate([image, cannied_image, superpixel_image], axis=0)
 
