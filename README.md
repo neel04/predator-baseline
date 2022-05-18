@@ -1,3 +1,9 @@
+# Fork from @YassineYousfi
+
+Simple modifications to improve parameters efficience by adopting pre-processing methods as well as a Fully-Pyramidal Network (FPN) decoder over a HRNet (High resolution Net) encoder to achieve finer-grained segmentations.
+
+This repo can be run exactly as instructions below in the OG repository
+
 # 🚗 comma10k-baseline 
 
 A semantic segmentation baseline using [@comma.ai](https://github.com/commaai)'s [comma10k dataset](https://github.com/commaai/comma10k).
