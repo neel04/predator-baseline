@@ -131,11 +131,6 @@ class LitModel(pl.LightningModule):
         metrics['step'] = self.current_epoch    
         
         print(f'\nFinal Computed Validation Metrics: {metrics}')
-
-        metrics['step'] = self.current_epoch
-        print(f'\nValidation metrics: {metrics}')
-            
-
         return {'log': metrics}
 
 
