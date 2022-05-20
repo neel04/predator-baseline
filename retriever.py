@@ -1,14 +1,15 @@
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
-
+import pandas as pd
 import numpy as np
-
+import pickle
 import cv2
 import albumentations as A
 from albumentations.core.composition import Compose
-
+import einops
 from typing import Callable, List
 from pathlib import Path
+import os
 from torch.utils.data import Dataset
 import torch
 import sys
@@ -183,12 +184,7 @@ def algo_preprocessor(image, img_path):
     canny_edges = cv2.cvtColor(cv2.Canny(image=img_blur, threshold1=30, threshold2=50), cv2.COLOR_BGR2RGB) # Canny Edge Detection
 
     #loading precomputed superpixels
-    #check if path exists for switching between Kaggle and Colab
-    base_path = '../input/comma10k/'
-
-    if not os.path.exists(base_path):
-        base_path = './comma10k/'
-    superpixels = cv2.cvtColor(cv2.imread(f'{base_path}superpixels/{img_path.split("/")[-1]}'), cv2.COLOR_BGR2RGB)
+    superpixels = cv2.cvtColor(cv2.imread(f'../input/comma10k/superpixels/{img_path.split("/")[-1]}'), cv2.COLOR_BGR2RGB)
     
     #convert hwc to chw for concatenation
     #superpixels = np.transpose(superpixels, (2, 0, 1))
